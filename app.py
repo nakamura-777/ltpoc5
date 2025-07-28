@@ -6,53 +6,27 @@ from datetime import datetime
 st.set_page_config(page_title="キャッシュ生産性アプリ", layout="wide")
 st.title("📊 キャッシュ生産性アプリ")
 
+# 製品マスターデータ（アプリ内定義）
+product_master = {
+    "製品A": {"単価売上": 1000, "材料費": 300, "外注費": 200},
+    "製品B": {"単価売上": 2000, "材料費": 700, "外注費": 400},
+    "製品C": {"単価売上": 1500, "材料費": 500, "外注費": 250},
+}
+
 if "product_data" not in st.session_state:
     st.session_state.product_data = []
 
-# --- CSV アップロード機能 ---
-st.subheader("📤 CSVアップロード（一括登録）")
-uploaded_file = st.file_uploader("CSVファイルを選択してください", type="csv")
-
-if uploaded_file:
-    try:
-        uploaded_df = pd.read_csv(uploaded_file)
-
-        required_cols = {"製品名", "出荷数量", "売上", "材料費", "外注費", "材料購入日", "出荷日"}
-        if not required_cols.issubset(uploaded_df.columns):
-            st.error("❌ 必要なカラムが不足しています。必要な列: " + ", ".join(required_cols))
-        else:
-            # カンマ除去と型変換
-            for col in ["売上", "材料費", "外注費"]:
-                uploaded_df[col] = uploaded_df[col].replace(",", "", regex=True).astype(float)
-
-            uploaded_df["材料購入日"] = pd.to_datetime(uploaded_df["材料購入日"])
-            uploaded_df["出荷日"] = pd.to_datetime(uploaded_df["出荷日"])
-            uploaded_df["LT（日）"] = (uploaded_df["出荷日"] - uploaded_df["材料購入日"]).dt.days.clip(lower=1)
-            uploaded_df["TP"] = uploaded_df["売上"] - uploaded_df["材料費"] - uploaded_df["外注費"]
-            uploaded_df["TP/LT"] = (uploaded_df["TP"] / uploaded_df["LT（日）"]).round(2)
-            uploaded_df["1個あたりTP"] = (uploaded_df["TP"] / uploaded_df["出荷数量"]).round(2)
-            uploaded_df["1個あたりTP/LT"] = (uploaded_df["1個あたりTP"] / uploaded_df["LT（日）"]).round(2)
-
-            st.session_state.product_data.extend(uploaded_df.to_dict(orient="records"))
-            st.success("✅ アップロード成功！")
-    except Exception as e:
-        st.error(f"❌ 読み込み中にエラーが発生しました: {e}")
-
 # --- 手動入力フォーム ---
-st.markdown("---")
-st.subheader("📥 製品データ手動入力")
+st.subheader("📥 製品データ登録（製品マスター使用）")
 with st.form("entry_form"):
     col1, col2 = st.columns(2)
 
     with col1:
-        product = st.text_input("製品名")
-        quantity = st.number_input("出荷数量", step=1, min_value=1)
-        sales = st.number_input("売上金額", step=1000)
-        material_cost = st.number_input("材料費", step=1000)
+        product = st.selectbox("製品を選択", list(product_master.keys()))
+        quantity = st.number_input("出荷数量", step=1, min_value=1, value=1)
+        purchase_date = st.date_input("材料購入日", value=datetime.today())
 
     with col2:
-        outsourcing_cost = st.number_input("外注費", step=1000)
-        purchase_date = st.date_input("材料購入日", value=datetime.today())
         shipment_date = st.date_input("出荷日", value=datetime.today())
 
     submitted = st.form_submit_button("送信")
@@ -61,8 +35,13 @@ with st.form("entry_form"):
         if shipment_date < purchase_date:
             st.error("⚠ 出荷日は材料購入日以降にしてください。")
         else:
+            unit_price = product_master[product]["単価売上"]
+            material_cost = product_master[product]["材料費"]
+            outsourcing_cost = product_master[product]["外注費"]
+
             lt_days = max((shipment_date - purchase_date).days, 1)
-            tp = sales - material_cost - outsourcing_cost
+            sales = unit_price * quantity
+            tp = sales - material_cost * quantity - outsourcing_cost * quantity
             tp_per_lt = round(tp / lt_days, 2)
             tp_per_unit = round(tp / quantity, 2)
             tp_per_unit_per_lt = round(tp / quantity / lt_days, 2)
@@ -71,8 +50,8 @@ with st.form("entry_form"):
                 "製品名": product,
                 "出荷数量": quantity,
                 "売上": sales,
-                "材料費": material_cost,
-                "外注費": outsourcing_cost,
+                "材料費": material_cost * quantity,
+                "外注費": outsourcing_cost * quantity,
                 "材料購入日": purchase_date.strftime("%Y-%m-%d"),
                 "出荷日": shipment_date.strftime("%Y-%m-%d"),
                 "LT（日）": lt_days,
@@ -83,7 +62,7 @@ with st.form("entry_form"):
             }
 
             st.session_state.product_data.append(new_entry)
-            st.success("✅ 入力完了")
+            st.success("✅ 登録完了")
 
 # --- データ一覧・分析 ---
 st.markdown("---")
