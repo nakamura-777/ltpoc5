@@ -1,51 +1,73 @@
 
 import streamlit as st
 import pandas as pd
-import plotly.express as px
-from datetime import datetime
+from datetime import date
 
-st.set_page_config(page_title="キャッシュ生産性アプリ", layout="wide")
+st.set_page_config(page_title="キャッシュ生産性アプリ v9", layout="wide")
 
-st.title("📊 キャッシュ生産性アプリ")
+st.title("📊 キャッシュ生産性アプリ v9 - 製品マスター連携版")
 
-uploaded_file = st.file_uploader("製品情報CSVをアップロード", type=["csv"])
-if uploaded_file:
-    df = pd.read_csv(uploaded_file)
+# 製品マスター読み込み
+uploaded_master = st.file_uploader("🔧 製品マスターCSVをアップロードしてください", type="csv")
 
-    # 前処理
-    for col in ["売上金額", "材料費", "出荷数", "外注費用"]:
-        if col in df.columns:
-            df[col] = pd.to_numeric(df[col].astype(str).str.replace(",", ""), errors="coerce").fillna(0)
+if uploaded_master:
+    master_df = pd.read_csv(uploaded_master)
+    st.success("製品マスターを読み込みました。")
 
-    df["生産開始日"] = pd.to_datetime(df["生産開始日"], errors="coerce")
-    df["出荷日"] = pd.to_datetime(df["出荷日"], errors="coerce")
-    df["リードタイム"] = (df["出荷日"] - df["生産開始日"]).dt.days.clip(lower=1)
+    # 入力フォーム
+    with st.form("input_form"):
+        st.subheader("📝 製品情報を手動入力")
+        col1, col2, col3 = st.columns(3)
+        with col1:
+            product_name = st.selectbox("品名", master_df["品名"].unique())
+            quantity = st.number_input("出荷数", min_value=1, value=10)
+        with col2:
+            start_date = st.date_input("生産開始日", value=date.today())
+            end_date = st.date_input("出荷日", value=date.today())
+        with col3:
+            selected = master_df[master_df["品名"] == product_name].iloc[0]
+            unit_price = st.number_input("売上単価", value=float(selected["売上単価"]))
+            material_cost = st.number_input("材料費", value=float(selected["材料費"]))
+            outsourcing_cost = st.number_input("外注費用", value=float(selected["外注費用"]))
 
-    df["スループット"] = (df["売上金額"] - df["材料費"] - df["外注費用"]) / df["出荷数"].replace(0, 1)
-    df["TP/LT"] = df["スループット"] / df["リードタイム"].replace(0, 1)
+        submitted = st.form_submit_button("追加する")
 
-    # 平均と合計の表示
-    st.subheader("📈 指標サマリー")
-    col1, col2, col3 = st.columns(3)
-    col1.metric("製品数", len(df))
-    col2.metric("平均スループット/個", f"{df['スループット'].mean():,.2f}")
-    col3.metric("平均TP/LT", f"{df['TP/LT'].mean():,.2f}")
+    if "records" not in st.session_state:
+        st.session_state.records = []
 
-    # グラフ
-    st.subheader("📊 TP/LTバブルチャート")
-    fig = px.scatter(
-        df,
-        x="TP/LT",
-        y="スループット",
-        size="出荷数",
-        color="品名",
-        hover_data=["品名", "売上金額", "材料費", "外注費用", "リードタイム"],
-        size_max=60,
-        height=600
-    )
-    st.plotly_chart(fig, use_container_width=True)
+    if submitted:
+        revenue = unit_price * quantity
+        tp = revenue - material_cost - outsourcing_cost
+        lt = max((end_date - start_date).days, 1)
+        tpl = tp / lt
+        st.session_state.records.append({
+            "品名": product_name,
+            "出荷数": quantity,
+            "売上金額": revenue,
+            "材料費": material_cost,
+            "外注費": outsourcing_cost,
+            "生産開始日": start_date,
+            "出荷日": end_date,
+            "リードタイム": lt,
+            "スループット": tp,
+            "TP/LT": tpl
+        })
+        st.success("データを追加しました。")
 
-    # CSV出力
-    st.subheader("⬇ データのダウンロード")
-    csv = df.to_csv(index=False).encode("utf-8-sig")
-    st.download_button("📥 結果CSVをダウンロード", csv, "キャッシュ生産性結果.csv", "text/csv")
+    # 入力済みデータ表示
+    if st.session_state.records:
+        df_records = pd.DataFrame(st.session_state.records)
+        st.dataframe(df_records, use_container_width=True)
+
+        # 平均表示
+        avg_tp = df_records["スループット"].mean()
+        avg_tpl = df_records["TP/LT"].mean()
+        total_products = len(df_records)
+
+        st.markdown(f"✅ 製品数: **{total_products}**, 平均TP: **{avg_tp:.2f}**, 平均TP/LT: **{avg_tpl:.2f}**")
+
+        # CSVダウンロード
+        csv = df_records.to_csv(index=False, encoding="utf-8-sig")
+        st.download_button("📥 CSVでダウンロード", csv, file_name="キャッシュ生産性結果.csv", mime="text/csv")
+else:
+    st.info("製品マスターCSVをアップロードすると、入力フォームが表示されます。")
