@@ -4,7 +4,7 @@ import plotly.express as px
 from datetime import datetime
 
 st.set_page_config(page_title="TP/LT 分析アプリ", layout="wide")
-st.title("📊 TP/LT キャッシュ生産性アプリ（日付のみ・グラフ改修）")
+st.title("📊 TP/LT キャッシュ生産性アプリ（集計付き）")
 
 if "product_data" not in st.session_state:
     st.session_state.product_data = []
@@ -56,6 +56,15 @@ if len(st.session_state.product_data) == 0:
 else:
     df = pd.DataFrame(st.session_state.product_data)
     st.dataframe(df, use_container_width=True)
+
+    # 📊 製品別サマリー表示
+    st.markdown("### 📌 製品別平均サマリー")
+    summary_df = df.groupby("製品名").agg({
+        "TP": "mean",
+        "TP/LT": "mean"
+    }).rename(columns={"TP": "平均TP", "TP/LT": "平均TP/LT"}).reset_index()
+    st.write(f"登録製品数：{summary_df.shape[0]} 製品")
+    st.dataframe(summary_df, use_container_width=True)
 
     # CSV出力
     csv = df.to_csv(index=False).encode("utf-8-sig")
