@@ -3,8 +3,8 @@ import pandas as pd
 import plotly.express as px
 from datetime import date
 
-st.set_page_config(page_title="TP/LT + 発注 + グラフ PoC", layout="wide")
-st.title("📦 キャッシュ生産性 × 材料発注 × TP/LT分析")
+st.set_page_config(page_title="TP/LT 分析アプリ", layout="wide")
+st.title("📊 TP/LT キャッシュ生産性アプリ")
 
 # セッション状態に保存
 if "product_data" not in st.session_state:
@@ -37,9 +37,7 @@ with st.form("entry_form"):
                 "出荷日": str(shipment_date),
                 "LT（日数）": lt,
                 "TP": tp,
-                "TP/LT": tp_per_lt,
-                "発注済": False,
-                "発注日": ""
+                "TP/LT": tp_per_lt
             }
 
             st.session_state.product_data.append(new_entry)
@@ -49,31 +47,17 @@ with st.form("entry_form"):
             st.json(new_entry)
 
 st.markdown("---")
-st.subheader("📊 製品一覧・発注管理")
+st.subheader("📋 製品データ一覧")
 
 if len(st.session_state.product_data) == 0:
     st.info("📭 まだデータが登録されていません。")
 else:
-    for i, item in enumerate(st.session_state.product_data):
-        cols = st.columns([2, 1, 1, 1, 1, 1, 1.5])
-        cols[0].markdown(f"**{item['製品名']}**")
-        cols[1].write(item["売上"])
-        cols[2].write(item["LT（日数）"])
-        cols[3].write(item["TP"])
-        cols[4].write(item["TP/LT"])
-        if item["発注済"]:
-            cols[5].success("✅ 発注済")
-            cols[6].write(item["発注日"])
-        else:
-            if cols[5].button("📦 発注", key=f"order_{i}"):
-                item["発注済"] = True
-                item["発注日"] = str(date.today())
-                st.experimental_rerun()
+    df = pd.DataFrame(st.session_state.product_data)
+    st.dataframe(df, use_container_width=True)
 
     st.markdown("---")
     st.subheader("📈 TP/LT 分析グラフ")
 
-    df = pd.DataFrame(st.session_state.product_data)
     fig = px.scatter(
         df,
         x="LT（日数）",
