@@ -6,38 +6,61 @@ from datetime import datetime
 st.set_page_config(page_title="キャッシュ生産性アプリ", layout="wide")
 st.title("📊 キャッシュ生産性アプリ")
 
-# 製品マスターデータ（アプリ内定義）
-product_master = {
-    "製品A": {"単価売上": 1000, "材料費": 300, "外注費": 200},
-    "製品B": {"単価売上": 2000, "材料費": 700, "外注費": 400},
-    "製品C": {"単価売上": 1500, "材料費": 500, "外注費": 250},
-}
+# --- 製品マスターの初期化 ---
+if "product_master" not in st.session_state:
+    st.session_state.product_master = {
+        "製品A": {"単価売上": 1000, "材料費": 300, "外注費": 200},
+        "製品B": {"単価売上": 2000, "材料費": 700, "外注費": 400}
+    }
 
+# --- 製品データの初期化 ---
 if "product_data" not in st.session_state:
     st.session_state.product_data = []
 
-# --- 手動入力フォーム ---
+# --- 製品マスター登録セクション ---
+st.sidebar.header("🛠 製品マスター登録")
+with st.sidebar.form("master_form"):
+    new_name = st.text_input("製品名")
+    new_price = st.number_input("単価売上", step=100, min_value=0)
+    new_mat_cost = st.number_input("材料費", step=100, min_value=0)
+    new_out_cost = st.number_input("外注費", step=100, min_value=0)
+    submitted = st.form_submit_button("登録 / 上書き")
+
+    if submitted and new_name:
+        st.session_state.product_master[new_name] = {
+            "単価売上": new_price,
+            "材料費": new_mat_cost,
+            "外注費": new_out_cost
+        }
+        st.sidebar.success(f"{new_name} をマスターに登録しました")
+
+# --- 製品マスター表示 ---
+st.sidebar.markdown("### 📋 製品マスター一覧")
+st.sidebar.dataframe(pd.DataFrame(st.session_state.product_master).T)
+
+# --- 製品データ登録フォーム ---
 st.subheader("📥 製品データ登録（製品マスター使用）")
 with st.form("entry_form"):
     col1, col2 = st.columns(2)
 
     with col1:
-        product = st.selectbox("製品を選択", list(product_master.keys()))
+        product = st.selectbox("製品を選択", list(st.session_state.product_master.keys()))
         quantity = st.number_input("出荷数量", step=1, min_value=1, value=1)
         purchase_date = st.date_input("材料購入日", value=datetime.today())
 
     with col2:
         shipment_date = st.date_input("出荷日", value=datetime.today())
 
-    submitted = st.form_submit_button("送信")
+    submitted2 = st.form_submit_button("送信")
 
-    if submitted:
+    if submitted2:
         if shipment_date < purchase_date:
             st.error("⚠ 出荷日は材料購入日以降にしてください。")
         else:
-            unit_price = product_master[product]["単価売上"]
-            material_cost = product_master[product]["材料費"]
-            outsourcing_cost = product_master[product]["外注費"]
+            master = st.session_state.product_master[product]
+            unit_price = master["単価売上"]
+            material_cost = master["材料費"]
+            outsourcing_cost = master["外注費"]
 
             lt_days = max((shipment_date - purchase_date).days, 1)
             sales = unit_price * quantity
@@ -62,9 +85,9 @@ with st.form("entry_form"):
             }
 
             st.session_state.product_data.append(new_entry)
-            st.success("✅ 登録完了")
+            st.success("✅ データ登録完了")
 
-# --- データ一覧・分析 ---
+# --- データ表示と分析 ---
 st.markdown("---")
 st.subheader("📋 製品データ一覧と分析")
 
