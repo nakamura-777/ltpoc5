@@ -36,66 +36,99 @@ with st.sidebar.expander("✍️ 製品マスター登録（手動）"):
 
 st.title("📊 キャッシュ生産性アプリ")
 
-with st.form("data_entry_form"):
-    col1, col2 = st.columns(2)
-    with col1:
-        product_name = st.selectbox("製品名", options=st.session_state.product_master_df["品名"].unique() if not st.session_state.product_master_df.empty else [])
-    with col2:
-        quantity = st.number_input("出荷数量", min_value=1, value=1)
+uploaded_data = st.file_uploader("📤 入力データを一括アップロード（CSV）", type="csv", key="bulk_input")
+if uploaded_data:
+    input_df = pd.read_csv(uploaded_data)
+    # 入力データに必要な列: 品名, 出荷数量, 生産開始日, 出荷日（yyyy-mm-dd）
+    input_df["生産開始日"] = pd.to_datetime(input_df["生産開始日"])
+    input_df["出荷日"] = pd.to_datetime(input_df["出荷日"])
 
-    # 該当製品がマスターにあるか確認
-    filtered = st.session_state.product_master_df[st.session_state.product_master_df["品名"] == product_name]
-    if not filtered.empty:
-        selected_row = filtered.iloc[0]
-        default_material = selected_row["材料費"]
-        default_outsource = selected_row["外注費用"]
-        default_price = selected_row["売上単価"]
-    else:
-        st.warning("選択された製品が製品マスターに存在しません。")
-        default_material = default_outsource = default_price = 0
+    def calculate(row):
+        matched = st.session_state.product_master_df[st.session_state.product_master_df["品名"] == row["品名"]]
+        if matched.empty:
+            return pd.Series([0, 0, 0, 0, 0])
+        matched_row = matched.iloc[0]
+        lt = max((row["出荷日"] - row["生産開始日"]).days, 1)
+        tp = (matched_row["売上単価"] - matched_row["材料費"] - matched_row["外注費用"]) * row["出荷数量"]
+        tpl = tp / lt
+        return pd.Series([matched_row["材料費"], matched_row["外注費用"], matched_row["売上単価"], tp, tpl])
 
-    col3, col4 = st.columns(2)
-    with col3:
-        material_cost = st.number_input("材料費", value=default_material)
-        outsource_cost = st.number_input("外注費用", value=default_outsource)
-    with col4:
-        unit_price = st.number_input("売上単価", value=default_price)
+    input_df[["材料費", "外注費用", "売上単価", "スループット", "TP/LT"]] = input_df.apply(calculate, axis=1)
+    input_df["LT"] = (input_df["出荷日"] - input_df["生産開始日"]).dt.days.clip(lower=1)
 
-    col5, col6 = st.columns(2)
-    with col5:
-        start_date = st.date_input("生産開始日", value=datetime.today())
-    with col6:
-        ship_date = st.date_input("出荷日", value=datetime.today())
-
-    submitted = st.form_submit_button("計算する")
-
-if submitted:
-    lt = max((ship_date - start_date).days, 1)
-    tp = (unit_price - material_cost - outsource_cost) * quantity
-    tpl = tp / lt
-
-    result_df = pd.DataFrame([{
-        "製品名": product_name,
-        "数量": quantity,
-        "材料費": material_cost,
-        "外注費": outsource_cost,
-        "売上単価": unit_price,
-        "スループット": tp,
-        "LT": lt,
-        "TP/LT": tpl
-    }])
-
-    st.subheader("計算結果")
-    st.dataframe(result_df)
+    st.subheader("📋 入力データの結果")
+    st.dataframe(input_df)
 
     fig = px.scatter(
-        result_df,
+        input_df,
         x="TP/LT", y="スループット",
-        size="数量", color="製品名",
+        size="出荷数量", color="品名",
         hover_data=["売上単価", "LT"]
     )
     st.plotly_chart(fig, use_container_width=True)
 
-    # CSVダウンロード
-    csv = result_df.to_csv(index=False).encode("utf-8-sig")
-    st.download_button("結果をCSVでダウンロード", data=csv, file_name="result.csv", mime="text/csv")
+    # CSV出力
+    csv = input_df.to_csv(index=False).encode("utf-8-sig")
+    st.download_button("結果をCSVでダウンロード", data=csv, file_name="bulk_result.csv", mime="text/csv")
+
+else:
+    with st.form("data_entry_form"):
+        col1, col2 = st.columns(2)
+        with col1:
+            product_name = st.selectbox("製品名", options=st.session_state.product_master_df["品名"].unique() if not st.session_state.product_master_df.empty else [])
+        with col2:
+            quantity = st.number_input("出荷数量", min_value=1, value=1)
+
+        filtered = st.session_state.product_master_df[st.session_state.product_master_df["品名"] == product_name]
+        if not filtered.empty:
+            selected_row = filtered.iloc[0]
+            default_material = selected_row["材料費"]
+            default_outsource = selected_row["外注費用"]
+            default_price = selected_row["売上単価"]
+        else:
+            default_material = default_outsource = default_price = 0
+
+        col3, col4 = st.columns(2)
+        with col3:
+            material_cost = st.number_input("材料費", value=default_material)
+            outsource_cost = st.number_input("外注費用", value=default_outsource)
+        with col4:
+            unit_price = st.number_input("売上単価", value=default_price)
+
+        col5, col6 = st.columns(2)
+        with col5:
+            start_date = st.date_input("生産開始日", value=datetime.today())
+        with col6:
+            ship_date = st.date_input("出荷日", value=datetime.today())
+
+        submitted = st.form_submit_button("計算する")
+
+    if submitted:
+        lt = max((ship_date - start_date).days, 1)
+        tp = (unit_price - material_cost - outsource_cost) * quantity
+        tpl = tp / lt
+
+        result_df = pd.DataFrame([{
+            "製品名": product_name,
+            "数量": quantity,
+            "材料費": material_cost,
+            "外注費": outsource_cost,
+            "売上単価": unit_price,
+            "スループット": tp,
+            "LT": lt,
+            "TP/LT": tpl
+        }])
+
+        st.subheader("計算結果")
+        st.dataframe(result_df)
+
+        fig = px.scatter(
+            result_df,
+            x="TP/LT", y="スループット",
+            size="数量", color="製品名",
+            hover_data=["売上単価", "LT"]
+        )
+        st.plotly_chart(fig, use_container_width=True)
+
+        csv = result_df.to_csv(index=False).encode("utf-8-sig")
+        st.download_button("結果をCSVでダウンロード", data=csv, file_name="result.csv", mime="text/csv")
