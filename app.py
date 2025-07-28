@@ -2,14 +2,14 @@ import streamlit as st
 import pandas as pd
 from datetime import date
 
-st.set_page_config(page_title="TP/LT 材料発注 PoC", layout="wide")
-st.title("📊 製品別 TP/LT 一覧 と 材料発注 PoC")
+st.set_page_config(page_title="TP/LT 統合PoC", layout="wide")
+st.title("📦 キャッシュ生産性 × 材料発注 統合アプリ")
 
 # セッション状態に保存
 if "product_data" not in st.session_state:
     st.session_state.product_data = []
 
-st.subheader("📥 データ入力")
+st.subheader("📥 製品データ入力")
 with st.form("entry_form"):
     product = st.text_input("製品名")
     sales = st.number_input("売上金額", step=1000)
@@ -26,7 +26,8 @@ with st.form("entry_form"):
             lt = (shipment_date - purchase_date).days
             tp = sales - material_cost - outsourcing_cost
             tp_per_lt = round(tp / lt, 2) if lt > 0 else 0
-            st.session_state.product_data.append({
+
+            new_entry = {
                 "製品名": product,
                 "売上": sales,
                 "材料費": material_cost,
@@ -38,17 +39,22 @@ with st.form("entry_form"):
                 "TP/LT": tp_per_lt,
                 "発注済": False,
                 "発注日": ""
-            })
-            st.success("✅ 入力を保存しました")
+            }
 
-# 一覧表示と発注ボタン
-st.subheader("📋 製品一覧と材料発注")
+            st.session_state.product_data.append(new_entry)
+
+            st.success("✅ 入力完了")
+            st.write("**結果プレビュー**")
+            st.json(new_entry)
+
+st.markdown("---")
+st.subheader("📊 製品一覧・発注管理")
 
 if len(st.session_state.product_data) == 0:
-    st.info("データがまだ登録されていません。")
+    st.info("📭 まだデータが登録されていません。")
 else:
     for i, item in enumerate(st.session_state.product_data):
-        cols = st.columns([2, 1, 1, 1, 1, 1, 1, 1.5])
+        cols = st.columns([2, 1, 1, 1, 1, 1, 1.5])
         cols[0].markdown(f"**{item['製品名']}**")
         cols[1].write(item["売上"])
         cols[2].write(item["LT（日数）"])
