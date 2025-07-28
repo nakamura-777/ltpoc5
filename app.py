@@ -15,11 +15,18 @@ with st.form("entry_form"):
     sales = st.number_input("売上金額", step=1000)
     material_cost = st.number_input("材料費", step=1000)
     outsourcing_cost = st.number_input("外注費", step=1000)
-    purchase_dt = st.datetime_input("材料購入日時", value=datetime.now())
-    shipment_dt = st.datetime_input("出荷日時", value=datetime.now())
+
+    purchase_date = st.date_input("材料購入日")
+    purchase_time = st.time_input("材料購入時間")
+    shipment_date = st.date_input("出荷日")
+    shipment_time = st.time_input("出荷時間")
+
     submitted = st.form_submit_button("送信")
 
     if submitted:
+        purchase_dt = datetime.combine(purchase_date, purchase_time)
+        shipment_dt = datetime.combine(shipment_date, shipment_time)
+
         if shipment_dt < purchase_dt:
             st.error("⚠ 出荷日時は材料購入日時以降にしてください。")
         else:
