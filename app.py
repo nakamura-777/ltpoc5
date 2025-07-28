@@ -4,8 +4,8 @@ import pandas as pd
 from datetime import date
 import plotly.express as px
 
-st.set_page_config(page_title="キャッシュ生産性アプリ v11", layout="wide")
-st.title("📊 キャッシュ生産性アプリ v11（製品マスター登録付き）")
+st.set_page_config(page_title="キャッシュ生産性アプリ v12", layout="wide")
+st.title("📊 キャッシュ生産性アプリ v12（製品マスター登録付き）")
 
 if "product_master" not in st.session_state:
     st.session_state.product_master = pd.DataFrame(columns=["品名", "材料費", "外注費用", "売上単価"])
@@ -24,9 +24,9 @@ if uploaded_master:
 with st.sidebar.form("product_form"):
     st.markdown("🔧 製品マスター手動登録")
     pname = st.text_input("品名")
-    mcost = st.number_input("材料費", value=0.0)
-    ocost = st.number_input("外注費用", value=0.0)
-    uprice = st.number_input("売上単価", value=0.0)
+    mcost = st.number_input("材料費", value=0.0, format="%.2f")
+    ocost = st.number_input("外注費用", value=0.0, format="%.2f")
+    uprice = st.number_input("売上単価", value=0.0, format="%.2f")
     add_master = st.form_submit_button("マスターに追加")
     if add_master and pname:
         st.session_state.product_master.loc[len(st.session_state.product_master)] = [pname, mcost, ocost, uprice]
@@ -34,20 +34,33 @@ with st.sidebar.form("product_form"):
 
 # メイン機能
 if not st.session_state.product_master.empty:
+    st.subheader("📝 製品データ入力")
+
     with st.form("entry_form"):
-        st.subheader("📝 製品データ入力")
         col1, col2, col3 = st.columns(3)
+
         with col1:
             product_name = st.selectbox("品名", st.session_state.product_master["品名"].unique())
             quantity = st.number_input("出荷数", min_value=1, value=10)
+
         with col2:
             start_date = st.date_input("生産開始日", value=date.today())
             end_date = st.date_input("出荷日", value=date.today())
+
         with col3:
-            selected = st.session_state.product_master[st.session_state.product_master["品名"] == product_name].iloc[0]
-            unit_price = st.number_input("売上単価", value=float(selected["売上単価"]))
-            material_cost = st.number_input("材料費", value=float(selected["材料費"]))
-            outsourcing_cost = st.number_input("外注費用", value=float(selected["外注費用"]))
+            if product_name in st.session_state.product_master["品名"].values:
+                selected = st.session_state.product_master[st.session_state.product_master["品名"] == product_name].iloc[0]
+                unit_price_default = float(selected["売上単価"])
+                material_cost_default = float(selected["材料費"])
+                outsourcing_cost_default = float(selected["外注費用"])
+            else:
+                unit_price_default = 0.0
+                material_cost_default = 0.0
+                outsourcing_cost_default = 0.0
+
+            unit_price = st.number_input("売上単価", value=unit_price_default, format="%.2f")
+            material_cost = st.number_input("材料費", value=material_cost_default, format="%.2f")
+            outsourcing_cost = st.number_input("外注費用", value=outsourcing_cost_default, format="%.2f")
 
         submitted = st.form_submit_button("追加")
 
