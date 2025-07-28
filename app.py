@@ -3,8 +3,8 @@ import pandas as pd
 import plotly.express as px
 from datetime import datetime
 
-st.set_page_config(page_title="TP/LT 分析アプリ", layout="wide")
-st.title("📊 TP/LT キャッシュ生産性アプリ（CSVカンマ対応）")
+st.set_page_config(page_title="キャッシュ生産性アプリ", layout="wide")
+st.title("📊 キャッシュ生産性アプリ")
 
 if "product_data" not in st.session_state:
     st.session_state.product_data = []
