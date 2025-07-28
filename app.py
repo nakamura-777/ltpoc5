@@ -2,21 +2,22 @@
 import streamlit as st
 import pandas as pd
 from datetime import date
+import plotly.express as px
 
-st.set_page_config(page_title="キャッシュ生産性アプリ v9", layout="wide")
+st.set_page_config(page_title="キャッシュ生産性アプリ v10", layout="wide")
+st.title("📊 キャッシュ生産性アプリ v10 - 可視化＆分析")
 
-st.title("📊 キャッシュ生産性アプリ v9 - 製品マスター連携版")
-
-# 製品マスター読み込み
-uploaded_master = st.file_uploader("🔧 製品マスターCSVをアップロードしてください", type="csv")
+uploaded_master = st.file_uploader("📁 製品マスターCSVをアップロードしてください", type="csv")
 
 if uploaded_master:
     master_df = pd.read_csv(uploaded_master)
     st.success("製品マスターを読み込みました。")
 
-    # 入力フォーム
+    if "records" not in st.session_state:
+        st.session_state.records = []
+
     with st.form("input_form"):
-        st.subheader("📝 製品情報を手動入力")
+        st.subheader("📝 手動入力でデータ追加")
         col1, col2, col3 = st.columns(3)
         with col1:
             product_name = st.selectbox("品名", master_df["品名"].unique())
@@ -31,9 +32,6 @@ if uploaded_master:
             outsourcing_cost = st.number_input("外注費用", value=float(selected["外注費用"]))
 
         submitted = st.form_submit_button("追加する")
-
-    if "records" not in st.session_state:
-        st.session_state.records = []
 
     if submitted:
         revenue = unit_price * quantity
@@ -54,20 +52,29 @@ if uploaded_master:
         })
         st.success("データを追加しました。")
 
-    # 入力済みデータ表示
     if st.session_state.records:
         df_records = pd.DataFrame(st.session_state.records)
+        st.subheader("📋 登録データ一覧")
         st.dataframe(df_records, use_container_width=True)
 
-        # 平均表示
         avg_tp = df_records["スループット"].mean()
         avg_tpl = df_records["TP/LT"].mean()
         total_products = len(df_records)
-
         st.markdown(f"✅ 製品数: **{total_products}**, 平均TP: **{avg_tp:.2f}**, 平均TP/LT: **{avg_tpl:.2f}**")
 
-        # CSVダウンロード
+        st.subheader("📈 バブルチャート（出荷数×TP/LT×製品）")
+        fig = px.scatter(
+            df_records,
+            x="TP/LT",
+            y="スループット",
+            size="出荷数",
+            color="品名",
+            hover_data=["リードタイム", "売上金額"],
+            title="製品別キャッシュ生産性分析"
+        )
+        st.plotly_chart(fig, use_container_width=True)
+
         csv = df_records.to_csv(index=False, encoding="utf-8-sig")
-        st.download_button("📥 CSVでダウンロード", csv, file_name="キャッシュ生産性結果.csv", mime="text/csv")
+        st.download_button("📥 結果CSVをダウンロード", csv, file_name="キャッシュ生産性結果.csv", mime="text/csv")
 else:
-    st.info("製品マスターCSVをアップロードすると、入力フォームが表示されます。")
+    st.info("製品マスターをアップロードしてください。")
