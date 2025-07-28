@@ -4,44 +4,43 @@ import plotly.express as px
 from datetime import datetime
 
 st.set_page_config(page_title="TP/LT 分析アプリ", layout="wide")
-st.title("📊 TP/LT キャッシュ生産性アプリ（時間対応・CSV出力付）")
+st.title("📊 TP/LT キャッシュ生産性アプリ（日付のみ・グラフ改修）")
 
 if "product_data" not in st.session_state:
     st.session_state.product_data = []
 
 st.subheader("📥 製品データ入力")
 with st.form("entry_form"):
-    product = st.text_input("製品名")
-    sales = st.number_input("売上金額", step=1000)
-    material_cost = st.number_input("材料費", step=1000)
-    outsourcing_cost = st.number_input("外注費", step=1000)
+    col1, col2 = st.columns(2)
 
-    purchase_date = st.date_input("材料購入日")
-    purchase_time = st.time_input("材料購入時間")
-    shipment_date = st.date_input("出荷日")
-    shipment_time = st.time_input("出荷時間")
+    with col1:
+        product = st.text_input("製品名")
+        sales = st.number_input("売上金額", step=1000)
+        material_cost = st.number_input("材料費", step=1000)
+
+    with col2:
+        outsourcing_cost = st.number_input("外注費", step=1000)
+        purchase_date = st.date_input("材料購入日", value=datetime.today())
+        shipment_date = st.date_input("出荷日", value=datetime.today())
 
     submitted = st.form_submit_button("送信")
 
     if submitted:
-        purchase_dt = datetime.combine(purchase_date, purchase_time)
-        shipment_dt = datetime.combine(shipment_date, shipment_time)
-
-        if shipment_dt < purchase_dt:
-            st.error("⚠ 出荷日時は材料購入日時以降にしてください。")
+        if shipment_date < purchase_date:
+            st.error("⚠ 出荷日は材料購入日以降にしてください。")
         else:
-            lt_hours = (shipment_dt - purchase_dt).total_seconds() / 3600
+            lt_days = max((shipment_date - purchase_date).days, 1)
             tp = sales - material_cost - outsourcing_cost
-            tp_per_lt = round(tp / lt_hours, 2) if lt_hours > 0 else 0
+            tp_per_lt = round(tp / lt_days, 2)
 
             new_entry = {
                 "製品名": product,
                 "売上": sales,
                 "材料費": material_cost,
                 "外注費": outsourcing_cost,
-                "材料購入日時": purchase_dt.strftime("%Y-%m-%d %H:%M"),
-                "出荷日時": shipment_dt.strftime("%Y-%m-%d %H:%M"),
-                "LT（時間）": round(lt_hours, 2),
+                "材料購入日": purchase_date.strftime("%Y-%m-%d"),
+                "出荷日": shipment_date.strftime("%Y-%m-%d"),
+                "LT（日）": lt_days,
                 "TP": tp,
                 "TP/LT": tp_per_lt
             }
@@ -68,16 +67,16 @@ else:
     )
 
     st.markdown("---")
-    st.subheader("📈 TP/LT 分析グラフ")
+    st.subheader("📈 TP/LT 分析グラフ（横軸：TP/LT、縦軸：TP）")
 
     fig = px.scatter(
         df,
-        x="LT（時間）",
-        y="TP/LT",
+        x="TP/LT",
+        y="TP",
         size="TP",
         color="製品名",
         hover_name="製品名",
-        title="製品別 TP/LT 分布（時間単位）",
-        labels={"LT（時間）": "リードタイム（時間）", "TP/LT": "キャッシュ生産性"}
+        title="TP vs TP/LT（製品別バブルチャート）",
+        labels={"TP/LT": "キャッシュ生産性", "TP": "スループット（TP）"}
     )
     st.plotly_chart(fig, use_container_width=True)
