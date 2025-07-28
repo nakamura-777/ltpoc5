@@ -1,89 +1,101 @@
 
 import streamlit as st
 import pandas as pd
-from datetime import datetime
 import plotly.express as px
+from datetime import datetime
+import io
 
-st.set_page_config(page_title="キャッシュ生産性アプリ v13", layout="wide")
+st.set_page_config(page_title="キャッシュ生産性アプリ", layout="wide")
 
-st.title("📊 キャッシュ生産性アプリ v13")
-
-# 製品マスターの読み込みまたは手動登録
-st.sidebar.header("📦 製品マスター管理")
-product_master_file = st.sidebar.file_uploader("製品マスターCSVをアップロード", type="csv")
-
+# 初期化
 if "product_master_df" not in st.session_state:
     st.session_state.product_master_df = pd.DataFrame(columns=["品名", "材料費", "外注費用", "売上単価"])
 
-if product_master_file:
-    uploaded_df = pd.read_csv(product_master_file)
-    if set(["品名", "材料費", "外注費用", "売上単価"]).issubset(uploaded_df.columns):
-        st.session_state.product_master_df = uploaded_df.drop_duplicates(subset=["品名"])
-    else:
-        st.sidebar.error("列名が正しくありません。['品名', '材料費', '外注費用', '売上単価'] を含めてください。")
+# 製品マスター CSV アップロード
+with st.sidebar.expander("📥 製品マスター登録（CSV）"):
+    uploaded_master = st.file_uploader("CSVアップロード", type="csv", key="master")
+    if uploaded_master:
+        st.session_state.product_master_df = pd.read_csv(uploaded_master)
 
-with st.sidebar.expander("🔧 製品マスター手動登録"):
-    with st.form("manual_register"):
-        pname = st.text_input("品名")
-        material_cost = st.number_input("材料費", min_value=0, value=0)
-        outsourcing_cost = st.number_input("外注費用", min_value=0, value=0)
-        sales_price = st.number_input("売上単価", min_value=0, value=0)
-        submit = st.form_submit_button("登録")
-        if submit and pname:
-            new_entry = pd.DataFrame([[pname, material_cost, outsourcing_cost, sales_price]],
-                                     columns=["品名", "材料費", "外注費用", "売上単価"])
-            st.session_state.product_master_df = pd.concat([st.session_state.product_master_df, new_entry]).drop_duplicates(subset=["品名"])
-            st.success(f"{pname} を登録しました。")
+# 製品マスター手動登録
+with st.sidebar.expander("✍️ 製品マスター登録（手動）"):
+    with st.form("register_form"):
+        new_name = st.text_input("品名")
+        new_mat_cost = st.number_input("材料費", value=0)
+        new_out_cost = st.number_input("外注費用", value=0)
+        new_price = st.number_input("売上単価", value=0)
+        reg_submit = st.form_submit_button("登録")
+        if reg_submit and new_name:
+            new_row = pd.DataFrame([{
+                "品名": new_name,
+                "材料費": new_mat_cost,
+                "外注費用": new_out_cost,
+                "売上単価": new_price
+            }])
+            st.session_state.product_master_df = pd.concat([st.session_state.product_master_df, new_row], ignore_index=True)
 
-# データ入力フォーム
-st.header("📝 生産データ入力")
+st.title("📊 キャッシュ生産性アプリ")
+
 with st.form("data_entry_form"):
-    selected_product = st.selectbox("品名を選択", options=st.session_state.product_master_df["品名"].unique())
-    selected_row = st.session_state.product_master_df[st.session_state.product_master_df["品名"] == selected_product].iloc[0]
+    col1, col2 = st.columns(2)
+    with col1:
+        product_name = st.selectbox("製品名", options=st.session_state.product_master_df["品名"].unique() if not st.session_state.product_master_df.empty else [])
+    with col2:
+        quantity = st.number_input("出荷数量", min_value=1, value=1)
 
-    mat_cost = st.number_input("材料費", min_value=0, value=int(selected_row["材料費"]))
-    out_cost = st.number_input("外注費", min_value=0, value=int(selected_row["外注費用"]))
-    price = st.number_input("売上単価", min_value=0, value=int(selected_row["売上単価"]))
-    qty = st.number_input("出荷数量", min_value=1, value=1)
-    prod_date = st.date_input("生産開始日", value=datetime.today())
-    ship_date = st.date_input("出荷日", value=datetime.today())
+    # 該当製品がマスターにあるか確認
+    filtered = st.session_state.product_master_df[st.session_state.product_master_df["品名"] == product_name]
+    if not filtered.empty:
+        selected_row = filtered.iloc[0]
+        default_material = selected_row["材料費"]
+        default_outsource = selected_row["外注費用"]
+        default_price = selected_row["売上単価"]
+    else:
+        st.warning("選択された製品が製品マスターに存在しません。")
+        default_material = default_outsource = default_price = 0
 
-    submitted = st.form_submit_button("登録")
+    col3, col4 = st.columns(2)
+    with col3:
+        material_cost = st.number_input("材料費", value=default_material)
+        outsource_cost = st.number_input("外注費用", value=default_outsource)
+    with col4:
+        unit_price = st.number_input("売上単価", value=default_price)
 
-if "data_records" not in st.session_state:
-    st.session_state.data_records = []
+    col5, col6 = st.columns(2)
+    with col5:
+        start_date = st.date_input("生産開始日", value=datetime.today())
+    with col6:
+        ship_date = st.date_input("出荷日", value=datetime.today())
+
+    submitted = st.form_submit_button("計算する")
 
 if submitted:
-    lt = max((ship_date - prod_date).days, 1)
-    tp = (price - mat_cost - out_cost) * qty
-    tp_per_lt = tp / lt
-    st.session_state.data_records.append({
-        "品名": selected_product,
-        "材料費": mat_cost,
-        "外注費": out_cost,
-        "売上単価": price,
-        "出荷数量": qty,
-        "生産開始日": prod_date,
-        "出荷日": ship_date,
+    lt = max((ship_date - start_date).days, 1)
+    tp = (unit_price - material_cost - outsource_cost) * quantity
+    tpl = tp / lt
+
+    result_df = pd.DataFrame([{
+        "製品名": product_name,
+        "数量": quantity,
+        "材料費": material_cost,
+        "外注費": outsource_cost,
+        "売上単価": unit_price,
+        "スループット": tp,
         "LT": lt,
-        "TP": tp,
-        "TP/LT": tp_per_lt
-    })
+        "TP/LT": tpl
+    }])
 
-# 表示・出力
-if st.session_state.data_records:
-    df = pd.DataFrame(st.session_state.data_records)
-    st.subheader("📋 登録データ一覧")
-    st.dataframe(df)
+    st.subheader("計算結果")
+    st.dataframe(result_df)
 
-    st.download_button("📥 CSVダウンロード", data=df.to_csv(index=False), file_name="キャッシュ生産性結果.csv", mime="text/csv")
-
-    st.subheader("📈 TP/LT バブルチャート")
-    fig = px.scatter(df, x="TP/LT", y="TP", color="品名", size="出荷数量",
-                     hover_name="品名", title="キャッシュ生産性バブルチャート")
+    fig = px.scatter(
+        result_df,
+        x="TP/LT", y="スループット",
+        size="数量", color="製品名",
+        hover_data=["売上単価", "LT"]
+    )
     st.plotly_chart(fig, use_container_width=True)
 
-    st.subheader("📊 サマリー")
-    st.write(f"✅ 登録製品数: {df['品名'].nunique()} 種類")
-    st.write(f"✅ 平均TP: {df['TP'].mean():,.2f}")
-    st.write(f"✅ 平均TP/LT: {df['TP/LT'].mean():,.2f}")
+    # CSVダウンロード
+    csv = result_df.to_csv(index=False).encode("utf-8-sig")
+    st.download_button("結果をCSVでダウンロード", data=csv, file_name="result.csv", mime="text/csv")
