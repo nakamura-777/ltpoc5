@@ -1,9 +1,10 @@
 import streamlit as st
 import pandas as pd
+import plotly.express as px
 from datetime import date
 
-st.set_page_config(page_title="TP/LT 統合PoC", layout="wide")
-st.title("📦 キャッシュ生産性 × 材料発注 統合アプリ")
+st.set_page_config(page_title="TP/LT + 発注 + グラフ PoC", layout="wide")
+st.title("📦 キャッシュ生産性 × 材料発注 × TP/LT分析")
 
 # セッション状態に保存
 if "product_data" not in st.session_state:
@@ -68,3 +69,19 @@ else:
                 item["発注済"] = True
                 item["発注日"] = str(date.today())
                 st.experimental_rerun()
+
+    st.markdown("---")
+    st.subheader("📈 TP/LT 分析グラフ")
+
+    df = pd.DataFrame(st.session_state.product_data)
+    fig = px.scatter(
+        df,
+        x="LT（日数）",
+        y="TP/LT",
+        size="TP",
+        color="製品名",
+        hover_name="製品名",
+        title="製品別 TP/LT 分布",
+        labels={"LT（日数）": "リードタイム", "TP/LT": "キャッシュ生産性"}
+    )
+    st.plotly_chart(fig, use_container_width=True)
