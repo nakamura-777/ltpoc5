@@ -4,7 +4,7 @@ import plotly.express as px
 from datetime import datetime
 
 st.set_page_config(page_title="TP/LT 分析アプリ", layout="wide")
-st.title("📊 TP/LT キャッシュ生産性アプリ（集計付き）")
+st.title("📊 TP/LT キャッシュ生産性アプリ（データ修正機能付き）")
 
 if "product_data" not in st.session_state:
     st.session_state.product_data = []
@@ -49,15 +49,49 @@ with st.form("entry_form"):
             st.success("✅ 入力完了")
 
 st.markdown("---")
-st.subheader("📋 製品データ一覧")
+st.subheader("📋 製品データ一覧と編集")
 
 if len(st.session_state.product_data) == 0:
     st.info("📭 まだデータが登録されていません。")
 else:
     df = pd.DataFrame(st.session_state.product_data)
+
+    edit_index = st.selectbox("修正するデータを選択してください（インデックス）", options=list(range(len(df))))
+    if st.button("選択データを修正"):
+        row = df.loc[edit_index]
+        with st.form("edit_form"):
+            col1, col2 = st.columns(2)
+            with col1:
+                product = st.text_input("製品名", value=row["製品名"])
+                sales = st.number_input("売上金額", value=row["売上"], step=1000)
+                material_cost = st.number_input("材料費", value=row["材料費"], step=1000)
+            with col2:
+                outsourcing_cost = st.number_input("外注費", value=row["外注費"], step=1000)
+                purchase_date = st.date_input("材料購入日", value=pd.to_datetime(row["材料購入日"]))
+                shipment_date = st.date_input("出荷日", value=pd.to_datetime(row["出荷日"]))
+
+            updated = st.form_submit_button("修正を保存")
+            if updated:
+                lt_days = max((shipment_date - purchase_date).days, 1)
+                tp = sales - material_cost - outsourcing_cost
+                tp_per_lt = round(tp / lt_days, 2)
+                st.session_state.product_data[edit_index] = {
+                    "製品名": product,
+                    "売上": sales,
+                    "材料費": material_cost,
+                    "外注費": outsourcing_cost,
+                    "材料購入日": purchase_date.strftime("%Y-%m-%d"),
+                    "出荷日": shipment_date.strftime("%Y-%m-%d"),
+                    "LT（日）": lt_days,
+                    "TP": tp,
+                    "TP/LT": tp_per_lt
+                }
+                st.success("✅ 修正完了")
+
+    df = pd.DataFrame(st.session_state.product_data)
     st.dataframe(df, use_container_width=True)
 
-    # 📊 製品別サマリー表示
+    # サマリー表示
     st.markdown("### 📌 製品別平均サマリー")
     summary_df = df.groupby("製品名").agg({
         "TP": "mean",
