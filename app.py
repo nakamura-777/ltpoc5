@@ -1,111 +1,89 @@
 
 import streamlit as st
 import pandas as pd
-from datetime import date
+from datetime import datetime
 import plotly.express as px
 
-st.set_page_config(page_title="キャッシュ生産性アプリ v12", layout="wide")
-st.title("📊 キャッシュ生産性アプリ v12（製品マスター登録付き）")
+st.set_page_config(page_title="キャッシュ生産性アプリ v13", layout="wide")
 
-if "product_master" not in st.session_state:
-    st.session_state.product_master = pd.DataFrame(columns=["品名", "材料費", "外注費用", "売上単価"])
-if "records" not in st.session_state:
-    st.session_state.records = []
+st.title("📊 キャッシュ生産性アプリ v13")
 
-st.sidebar.header("📁 製品マスターの管理")
+# 製品マスターの読み込みまたは手動登録
+st.sidebar.header("📦 製品マスター管理")
+product_master_file = st.sidebar.file_uploader("製品マスターCSVをアップロード", type="csv")
 
-# CSVアップロード
-uploaded_master = st.sidebar.file_uploader("CSVからマスター読込", type="csv")
-if uploaded_master:
-    st.session_state.product_master = pd.read_csv(uploaded_master)
-    st.sidebar.success("✅ 製品マスターを読み込みました")
+if "product_master_df" not in st.session_state:
+    st.session_state.product_master_df = pd.DataFrame(columns=["品名", "材料費", "外注費用", "売上単価"])
 
-# 手動登録
-with st.sidebar.form("product_form"):
-    st.markdown("🔧 製品マスター手動登録")
-    pname = st.text_input("品名")
-    mcost = st.number_input("材料費", value=0.0, format="%.2f")
-    ocost = st.number_input("外注費用", value=0.0, format="%.2f")
-    uprice = st.number_input("売上単価", value=0.0, format="%.2f")
-    add_master = st.form_submit_button("マスターに追加")
-    if add_master and pname:
-        st.session_state.product_master.loc[len(st.session_state.product_master)] = [pname, mcost, ocost, uprice]
-        st.sidebar.success(f"✅ {pname} をマスターに追加しました")
+if product_master_file:
+    uploaded_df = pd.read_csv(product_master_file)
+    if set(["品名", "材料費", "外注費用", "売上単価"]).issubset(uploaded_df.columns):
+        st.session_state.product_master_df = uploaded_df.drop_duplicates(subset=["品名"])
+    else:
+        st.sidebar.error("列名が正しくありません。['品名', '材料費', '外注費用', '売上単価'] を含めてください。")
 
-# メイン機能
-if not st.session_state.product_master.empty:
-    st.subheader("📝 製品データ入力")
+with st.sidebar.expander("🔧 製品マスター手動登録"):
+    with st.form("manual_register"):
+        pname = st.text_input("品名")
+        material_cost = st.number_input("材料費", min_value=0, value=0)
+        outsourcing_cost = st.number_input("外注費用", min_value=0, value=0)
+        sales_price = st.number_input("売上単価", min_value=0, value=0)
+        submit = st.form_submit_button("登録")
+        if submit and pname:
+            new_entry = pd.DataFrame([[pname, material_cost, outsourcing_cost, sales_price]],
+                                     columns=["品名", "材料費", "外注費用", "売上単価"])
+            st.session_state.product_master_df = pd.concat([st.session_state.product_master_df, new_entry]).drop_duplicates(subset=["品名"])
+            st.success(f"{pname} を登録しました。")
 
-    with st.form("entry_form"):
-        col1, col2, col3 = st.columns(3)
+# データ入力フォーム
+st.header("📝 生産データ入力")
+with st.form("data_entry_form"):
+    selected_product = st.selectbox("品名を選択", options=st.session_state.product_master_df["品名"].unique())
+    selected_row = st.session_state.product_master_df[st.session_state.product_master_df["品名"] == selected_product].iloc[0]
 
-        with col1:
-            product_name = st.selectbox("品名", st.session_state.product_master["品名"].unique())
-            quantity = st.number_input("出荷数", min_value=1, value=10)
+    mat_cost = st.number_input("材料費", min_value=0, value=int(selected_row["材料費"]))
+    out_cost = st.number_input("外注費", min_value=0, value=int(selected_row["外注費用"]))
+    price = st.number_input("売上単価", min_value=0, value=int(selected_row["売上単価"]))
+    qty = st.number_input("出荷数量", min_value=1, value=1)
+    prod_date = st.date_input("生産開始日", value=datetime.today())
+    ship_date = st.date_input("出荷日", value=datetime.today())
 
-        with col2:
-            start_date = st.date_input("生産開始日", value=date.today())
-            end_date = st.date_input("出荷日", value=date.today())
+    submitted = st.form_submit_button("登録")
 
-        with col3:
-            if product_name in st.session_state.product_master["品名"].values:
-                selected = st.session_state.product_master[st.session_state.product_master["品名"] == product_name].iloc[0]
-                unit_price_default = float(selected["売上単価"])
-                material_cost_default = float(selected["材料費"])
-                outsourcing_cost_default = float(selected["外注費用"])
-            else:
-                unit_price_default = 0.0
-                material_cost_default = 0.0
-                outsourcing_cost_default = 0.0
+if "data_records" not in st.session_state:
+    st.session_state.data_records = []
 
-            unit_price = st.number_input("売上単価", value=unit_price_default, format="%.2f")
-            material_cost = st.number_input("材料費", value=material_cost_default, format="%.2f")
-            outsourcing_cost = st.number_input("外注費用", value=outsourcing_cost_default, format="%.2f")
+if submitted:
+    lt = max((ship_date - prod_date).days, 1)
+    tp = (price - mat_cost - out_cost) * qty
+    tp_per_lt = tp / lt
+    st.session_state.data_records.append({
+        "品名": selected_product,
+        "材料費": mat_cost,
+        "外注費": out_cost,
+        "売上単価": price,
+        "出荷数量": qty,
+        "生産開始日": prod_date,
+        "出荷日": ship_date,
+        "LT": lt,
+        "TP": tp,
+        "TP/LT": tp_per_lt
+    })
 
-        submitted = st.form_submit_button("追加")
+# 表示・出力
+if st.session_state.data_records:
+    df = pd.DataFrame(st.session_state.data_records)
+    st.subheader("📋 登録データ一覧")
+    st.dataframe(df)
 
-    if submitted:
-        revenue = unit_price * quantity
-        tp = revenue - material_cost - outsourcing_cost
-        lt = max((end_date - start_date).days, 1)
-        tpl = tp / lt
-        st.session_state.records.append({
-            "品名": product_name,
-            "出荷数": quantity,
-            "売上金額": revenue,
-            "材料費": material_cost,
-            "外注費": outsourcing_cost,
-            "生産開始日": start_date,
-            "出荷日": end_date,
-            "リードタイム": lt,
-            "スループット": tp,
-            "TP/LT": tpl
-        })
-        st.success("✅ データを追加しました")
+    st.download_button("📥 CSVダウンロード", data=df.to_csv(index=False), file_name="キャッシュ生産性結果.csv", mime="text/csv")
 
-    if st.session_state.records:
-        df = pd.DataFrame(st.session_state.records)
-        st.subheader("📋 登録済データ")
-        st.dataframe(df, use_container_width=True)
+    st.subheader("📈 TP/LT バブルチャート")
+    fig = px.scatter(df, x="TP/LT", y="TP", color="品名", size="出荷数量",
+                     hover_name="品名", title="キャッシュ生産性バブルチャート")
+    st.plotly_chart(fig, use_container_width=True)
 
-        avg_tp = df["スループット"].mean()
-        avg_tpl = df["TP/LT"].mean()
-        total_products = len(df)
-        st.markdown(f"✅ 製品数: **{total_products}**, 平均TP: **{avg_tp:.2f}**, 平均TP/LT: **{avg_tpl:.2f}**")
-
-        st.subheader("📈 バブルチャート")
-        fig = px.scatter(
-            df,
-            x="TP/LT",
-            y="スループット",
-            size="出荷数",
-            color="品名",
-            hover_data=["リードタイム", "売上金額"],
-            title="製品別キャッシュ生産性分析"
-        )
-        st.plotly_chart(fig, use_container_width=True)
-
-        csv = df.to_csv(index=False, encoding="utf-8-sig")
-        st.download_button("📥 結果CSVをダウンロード", csv, file_name="キャッシュ生産性結果.csv", mime="text/csv")
-else:
-    st.info("📌 左のサイドバーから製品マスターを登録してください。")
+    st.subheader("📊 サマリー")
+    st.write(f"✅ 登録製品数: {df['品名'].nunique()} 種類")
+    st.write(f"✅ 平均TP: {df['TP'].mean():,.2f}")
+    st.write(f"✅ 平均TP/LT: {df['TP/LT'].mean():,.2f}")
