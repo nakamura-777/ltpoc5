@@ -21,12 +21,22 @@ if uploaded_file:
     # 出荷日（AI列）をdatetimeに変換
     df["出荷日"] = pd.to_datetime(df["出荷日"], errors="coerce")
 
-    # 売上単価（U列）のカンマ除去
-    df["売上単価"] = pd.to_numeric(df["売上単価"].astype(str).str.replace(",", ""), errors="coerce")
+    # 売上単価列を自動検出
+    sales_candidates = [col for col in df.columns if "売上" in col or "単価" in col or col.startswith("U")]
+    if sales_candidates:
+        sales_col = sales_candidates[0]
+        df["売上単価"] = pd.to_numeric(df[sales_col].astype(str).str.replace(",", ""), errors="coerce")
+    else:
+        st.error("⚠️『売上単価』に該当する列が見つかりませんでした。")
+        st.stop()
 
     # 対象列抽出
-    df = df[["品名", "材料費", "出荷済数", "出荷日", "売上単価"]].copy()
-    df = df.dropna(subset=["品名", "材料費", "出荷済数"])
+    required_cols = ["品名", "材料費", "出荷済数", "出荷日", "売上単価"]
+    for col in required_cols:
+        if col not in df.columns:
+            st.error(f"⚠️必要な列 '{col}' が見つかりません。CSVを確認してください。")
+            st.stop()
+    df = df[required_cols].dropna()
 
     st.write("読み込みデータ（上位10件）")
     st.dataframe(df.head(10))
@@ -47,7 +57,6 @@ if uploaded_file:
         if 売上単価手動入力:
             df["売上単価"] = 売上単価  # 手動入力で一括上書き
 
-        df = df.dropna(subset=["売上単価"])
         df["TP_1個あたり"] = df["売上単価"] - df["材料費_1個あたり"] - 外注費単価
         df["TP_合計"] = df["TP_1個あたり"] * df["出荷済数"]
         df["TP/LT"] = df["TP_合計"] / df["リードタイム（日）"]
