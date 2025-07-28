@@ -4,12 +4,38 @@ import plotly.express as px
 from datetime import datetime
 
 st.set_page_config(page_title="TP/LT 分析アプリ", layout="wide")
-st.title("📊 TP/LT キャッシュ生産性アプリ（数量・平均TP付き）")
+st.title("📊 TP/LT キャッシュ生産性アプリ（CSVアップロード対応）")
 
 if "product_data" not in st.session_state:
     st.session_state.product_data = []
 
-st.subheader("📥 製品データ入力")
+# --- CSV アップロード機能 ---
+st.subheader("📤 CSVアップロード（一括登録）")
+uploaded_file = st.file_uploader("CSVファイルを選択してください", type="csv")
+
+if uploaded_file:
+    try:
+        uploaded_df = pd.read_csv(uploaded_file)
+        required_cols = {"製品名", "出荷数量", "売上", "材料費", "外注費", "材料購入日", "出荷日"}
+        if not required_cols.issubset(uploaded_df.columns):
+            st.error("❌ 必要なカラムが不足しています。必要な列: " + ", ".join(required_cols))
+        else:
+            uploaded_df["材料購入日"] = pd.to_datetime(uploaded_df["材料購入日"])
+            uploaded_df["出荷日"] = pd.to_datetime(uploaded_df["出荷日"])
+            uploaded_df["LT（日）"] = (uploaded_df["出荷日"] - uploaded_df["材料購入日"]).dt.days.clip(lower=1)
+            uploaded_df["TP"] = uploaded_df["売上"] - uploaded_df["材料費"] - uploaded_df["外注費"]
+            uploaded_df["TP/LT"] = (uploaded_df["TP"] / uploaded_df["LT（日）"]).round(2)
+            uploaded_df["1個あたりTP"] = (uploaded_df["TP"] / uploaded_df["出荷数量"]).round(2)
+            uploaded_df["1個あたりTP/LT"] = (uploaded_df["1個あたりTP"] / uploaded_df["LT（日）"]).round(2)
+
+            st.session_state.product_data.extend(uploaded_df.to_dict(orient="records"))
+            st.success("✅ アップロード成功！")
+    except Exception as e:
+        st.error(f"❌ 読み込み中にエラーが発生しました: {e}")
+
+# --- 手動入力フォーム ---
+st.markdown("---")
+st.subheader("📥 製品データ手動入力")
 with st.form("entry_form"):
     col1, col2 = st.columns(2)
 
@@ -54,6 +80,7 @@ with st.form("entry_form"):
             st.session_state.product_data.append(new_entry)
             st.success("✅ 入力完了")
 
+# --- データ一覧・分析 ---
 st.markdown("---")
 st.subheader("📋 製品データ一覧と分析")
 
