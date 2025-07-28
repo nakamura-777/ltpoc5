@@ -4,7 +4,7 @@ import plotly.express as px
 from datetime import datetime
 
 st.set_page_config(page_title="TP/LT 分析アプリ", layout="wide")
-st.title("📊 TP/LT キャッシュ生産性アプリ（CSVアップロード対応）")
+st.title("📊 TP/LT キャッシュ生産性アプリ（CSVカンマ対応）")
 
 if "product_data" not in st.session_state:
     st.session_state.product_data = []
@@ -16,10 +16,15 @@ uploaded_file = st.file_uploader("CSVファイルを選択してください", t
 if uploaded_file:
     try:
         uploaded_df = pd.read_csv(uploaded_file)
+
         required_cols = {"製品名", "出荷数量", "売上", "材料費", "外注費", "材料購入日", "出荷日"}
         if not required_cols.issubset(uploaded_df.columns):
             st.error("❌ 必要なカラムが不足しています。必要な列: " + ", ".join(required_cols))
         else:
+            # カンマ除去と型変換
+            for col in ["売上", "材料費", "外注費"]:
+                uploaded_df[col] = uploaded_df[col].replace(",", "", regex=True).astype(float)
+
             uploaded_df["材料購入日"] = pd.to_datetime(uploaded_df["材料購入日"])
             uploaded_df["出荷日"] = pd.to_datetime(uploaded_df["出荷日"])
             uploaded_df["LT（日）"] = (uploaded_df["出荷日"] - uploaded_df["材料購入日"]).dt.days.clip(lower=1)
