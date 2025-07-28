@@ -4,34 +4,52 @@ import pandas as pd
 from datetime import date
 import plotly.express as px
 
-st.set_page_config(page_title="キャッシュ生産性アプリ v10", layout="wide")
-st.title("📊 キャッシュ生産性アプリ v10 - 可視化＆分析")
+st.set_page_config(page_title="キャッシュ生産性アプリ v11", layout="wide")
+st.title("📊 キャッシュ生産性アプリ v11（製品マスター登録付き）")
 
-uploaded_master = st.file_uploader("📁 製品マスターCSVをアップロードしてください", type="csv")
+if "product_master" not in st.session_state:
+    st.session_state.product_master = pd.DataFrame(columns=["品名", "材料費", "外注費用", "売上単価"])
+if "records" not in st.session_state:
+    st.session_state.records = []
 
+st.sidebar.header("📁 製品マスターの管理")
+
+# CSVアップロード
+uploaded_master = st.sidebar.file_uploader("CSVからマスター読込", type="csv")
 if uploaded_master:
-    master_df = pd.read_csv(uploaded_master)
-    st.success("製品マスターを読み込みました。")
+    st.session_state.product_master = pd.read_csv(uploaded_master)
+    st.sidebar.success("✅ 製品マスターを読み込みました")
 
-    if "records" not in st.session_state:
-        st.session_state.records = []
+# 手動登録
+with st.sidebar.form("product_form"):
+    st.markdown("🔧 製品マスター手動登録")
+    pname = st.text_input("品名")
+    mcost = st.number_input("材料費", value=0.0)
+    ocost = st.number_input("外注費用", value=0.0)
+    uprice = st.number_input("売上単価", value=0.0)
+    add_master = st.form_submit_button("マスターに追加")
+    if add_master and pname:
+        st.session_state.product_master.loc[len(st.session_state.product_master)] = [pname, mcost, ocost, uprice]
+        st.sidebar.success(f"✅ {pname} をマスターに追加しました")
 
-    with st.form("input_form"):
-        st.subheader("📝 手動入力でデータ追加")
+# メイン機能
+if not st.session_state.product_master.empty:
+    with st.form("entry_form"):
+        st.subheader("📝 製品データ入力")
         col1, col2, col3 = st.columns(3)
         with col1:
-            product_name = st.selectbox("品名", master_df["品名"].unique())
+            product_name = st.selectbox("品名", st.session_state.product_master["品名"].unique())
             quantity = st.number_input("出荷数", min_value=1, value=10)
         with col2:
             start_date = st.date_input("生産開始日", value=date.today())
             end_date = st.date_input("出荷日", value=date.today())
         with col3:
-            selected = master_df[master_df["品名"] == product_name].iloc[0]
+            selected = st.session_state.product_master[st.session_state.product_master["品名"] == product_name].iloc[0]
             unit_price = st.number_input("売上単価", value=float(selected["売上単価"]))
             material_cost = st.number_input("材料費", value=float(selected["材料費"]))
             outsourcing_cost = st.number_input("外注費用", value=float(selected["外注費用"]))
 
-        submitted = st.form_submit_button("追加する")
+        submitted = st.form_submit_button("追加")
 
     if submitted:
         revenue = unit_price * quantity
@@ -50,21 +68,21 @@ if uploaded_master:
             "スループット": tp,
             "TP/LT": tpl
         })
-        st.success("データを追加しました。")
+        st.success("✅ データを追加しました")
 
     if st.session_state.records:
-        df_records = pd.DataFrame(st.session_state.records)
-        st.subheader("📋 登録データ一覧")
-        st.dataframe(df_records, use_container_width=True)
+        df = pd.DataFrame(st.session_state.records)
+        st.subheader("📋 登録済データ")
+        st.dataframe(df, use_container_width=True)
 
-        avg_tp = df_records["スループット"].mean()
-        avg_tpl = df_records["TP/LT"].mean()
-        total_products = len(df_records)
+        avg_tp = df["スループット"].mean()
+        avg_tpl = df["TP/LT"].mean()
+        total_products = len(df)
         st.markdown(f"✅ 製品数: **{total_products}**, 平均TP: **{avg_tp:.2f}**, 平均TP/LT: **{avg_tpl:.2f}**")
 
-        st.subheader("📈 バブルチャート（出荷数×TP/LT×製品）")
+        st.subheader("📈 バブルチャート")
         fig = px.scatter(
-            df_records,
+            df,
             x="TP/LT",
             y="スループット",
             size="出荷数",
@@ -74,7 +92,7 @@ if uploaded_master:
         )
         st.plotly_chart(fig, use_container_width=True)
 
-        csv = df_records.to_csv(index=False, encoding="utf-8-sig")
+        csv = df.to_csv(index=False, encoding="utf-8-sig")
         st.download_button("📥 結果CSVをダウンロード", csv, file_name="キャッシュ生産性結果.csv", mime="text/csv")
 else:
-    st.info("製品マスターをアップロードしてください。")
+    st.info("📌 左のサイドバーから製品マスターを登録してください。")
